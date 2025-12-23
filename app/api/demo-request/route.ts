@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getEmailQueue } from '@/app/_services/emailQueue';
 
 // Supabase client - with fallback for missing env vars
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -54,15 +55,13 @@ const createTransporter = () => {
     },
     pool: true,
     maxConnections: 1,
-    rateDelta: 20000,
-    rateLimit: 5,
-    debug: true,
-    logger: true
+    debug: false,
+    logger: false
   });
 };
 
-// Send email utility with improved error handling
-const sendEmail = async (options: EmailOptions): Promise<boolean> => {
+// Internal function to actually send the email (used by queue)
+const _sendEmailInternal = async (options: EmailOptions): Promise<boolean> => {
   try {
     const transporter = createTransporter();
     
@@ -99,6 +98,13 @@ const sendEmail = async (options: EmailOptions): Promise<boolean> => {
     
     throw new Error(`Email sending failed: ${errorMessage} (Code: ${errorCode})`);
   }
+};
+
+// Public function that uses queue system for rate limiting
+const sendEmail = async (options: EmailOptions): Promise<boolean> => {
+  const emailQueue = getEmailQueue();
+  console.log('Email kuyruğa ekleniyor:', options.to);
+  return await emailQueue.enqueue(_sendEmailInternal, options);
 };
 
 // Generate confirmation email HTML for applicant

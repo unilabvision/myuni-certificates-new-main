@@ -1,8 +1,9 @@
 // app/_services/emailService.js
 import nodemailer from 'nodemailer';
+import { getEmailQueue } from './emailQueue';
 
-// Send course purchase confirmation email
-const sendPurchaseConfirmationEmail = async (userInfo, courseInfo, orderInfo, locale = 'tr', courseType = 'online') => {
+// Internal function to actually send the email (used by queue)
+const _sendPurchaseConfirmationEmailInternal = async (userInfo, courseInfo, orderInfo, locale = 'tr', courseType = 'online') => {
   try {
     console.log('Starting email send process...');
     console.log('Nodemailer loaded successfully');
@@ -444,6 +445,13 @@ MyUNI Ekibi
       error: error.message
     };
   }
+};
+
+// Public function that uses queue system for rate limiting
+const sendPurchaseConfirmationEmail = async (userInfo, courseInfo, orderInfo, locale = 'tr', courseType = 'online') => {
+  const emailQueue = getEmailQueue();
+  console.log('Email kuyruğa ekleniyor:', userInfo.email);
+  return await emailQueue.enqueue(_sendPurchaseConfirmationEmailInternal, userInfo, courseInfo, orderInfo, locale, courseType);
 };
 
 // Send certificate completion email - specialized function
