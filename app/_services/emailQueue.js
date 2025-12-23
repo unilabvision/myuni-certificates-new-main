@@ -30,10 +30,9 @@ class EmailQueue {
   // Son gönderim zamanlarını temizle (eski kayıtları kaldır)
   cleanupOldSentTimes() {
     const now = Date.now();
-    const oneMinuteAgo = now - 60000;
     const oneHourAgo = now - 3600000;
     
-    // Son dakika ve saat içindeki gönderimleri tut
+    // Son saat içindeki gönderimleri tut
     this.recentSentTimes = this.recentSentTimes.filter(time => time > oneHourAgo);
   }
 
