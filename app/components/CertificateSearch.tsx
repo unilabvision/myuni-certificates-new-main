@@ -20,9 +20,19 @@ export default function CertificateSearch() {
           .from('certificates')
           .select('organization_slug')
           .eq('certificatenumber', certificatenumber)
-          .single();
+          .maybeSingle();
 
-        if (error || !data || !data.organization_slug) {
+        if (error) {
+          console.error('Sertifika sorgu hatası:', error);
+          if (error.code === 'PGRST116' || error.message?.includes('multiple')) {
+            alert('Bu sertifika numarası için birden fazla kayıt bulundu. Lütfen yönetici ile iletişime geçin.');
+          } else {
+            alert('Sertifika bulunamadı. Lütfen sertifika numarasını kontrol edin.');
+          }
+          return;
+        }
+
+        if (!data || !data.organization_slug) {
           alert('Sertifika bulunamadı veya organizasyon bilgisi eksik.');
           return;
         }

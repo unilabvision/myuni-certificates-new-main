@@ -90,18 +90,23 @@ export default function CertificatePage() {
           .select('*')
           .eq('certificatenumber', certificatenumber.trim())
           .eq('organization_slug', organizationSlug.trim())
-          .single();
+          .maybeSingle();
 
         if (certError) {
           console.error('Sertifika sorgu hatası:', certError);
-          setError(`Sertifika bulunamadı: ${certError.message}`);
+          // Eğer birden fazla satır varsa özel mesaj göster
+          if (certError.code === 'PGRST116' || certError.message?.includes('multiple')) {
+            setError('Bu sertifika numarası için birden fazla kayıt bulundu. Lütfen yönetici ile iletişime geçin.');
+          } else {
+            setError('Sertifika bulunamadı. Lütfen sertifika numarasını ve organizasyonu kontrol edin.');
+          }
           setLoading(false);
           return;
         }
 
         if (!certData) {
           console.error('Sertifika verisi bulunamadı:', { certificatenumber, organizationSlug });
-          setError('Sertifika bulunamadı. Lütfen sertifika numarasını veya organizasyonu kontrol edin.');
+          setError('Sertifika bulunamadı. Lütfen sertifika numarasını ve organizasyonu kontrol edin.');
           setLoading(false);
           return;
         }
@@ -111,7 +116,7 @@ export default function CertificatePage() {
           .from('organizations')
           .select('name, primary_color, secondary_color, logo, website')
           .eq('slug', organizationSlug.trim())
-          .single();
+          .maybeSingle();
 
         if (orgData && !orgError) {
           certData.organizations = orgData;
@@ -264,18 +269,23 @@ export default function CertificatePage() {
           .select('*')
           .eq('certificatenumber', certificatenumber.trim())
           .eq('organization_slug', organizationSlug.trim())
-          .single();
+          .maybeSingle();
 
         if (certError) {
           console.error('Sertifika sorgu hatası:', certError);
-          setError(`Sertifika bulunamadı: ${certError.message}`);
+          // Eğer birden fazla satır varsa özel mesaj göster
+          if (certError.code === 'PGRST116' || certError.message?.includes('multiple')) {
+            setError('Bu sertifika numarası için birden fazla kayıt bulundu. Lütfen yönetici ile iletişime geçin.');
+          } else {
+            setError('Sertifika bulunamadı. Lütfen sertifika numarasını ve organizasyonu kontrol edin.');
+          }
           setLoading(false);
           return;
         }
 
         if (!certData) {
           console.error('Sertifika verisi bulunamadı:', { certificatenumber, organizationSlug });
-          setError('Sertifika bulunamadı. Lütfen sertifika numarasını veya organizasyonu kontrol edin.');
+          setError('Sertifika bulunamadı. Lütfen sertifika numarasını ve organizasyonu kontrol edin.');
           setLoading(false);
           return;
         }
@@ -285,7 +295,7 @@ export default function CertificatePage() {
           .from('organizations')
           .select('name, primary_color, secondary_color, logo, website')
           .eq('slug', organizationSlug.trim())
-          .single();
+          .maybeSingle();
 
         if (orgData && !orgError) {
           certData.organizations = orgData;

@@ -156,10 +156,18 @@ export const getCertificateTemplate = async (organizationSlug: string, templateI
       query = query.eq('is_default', true);
     }
 
-    const { data, error } = await query.single();
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
-      console.error('Template bulunamadı:', error);
+      console.error('Template sorgu hatası:', error);
+      if (error.code === 'PGRST116' || error.message?.includes('multiple')) {
+        console.error('Bu organizasyon için birden fazla template bulundu:', organizationSlug);
+      }
+      return null;
+    }
+
+    if (!data) {
+      console.error('Template bulunamadı:', { organizationSlug, templateId });
       return null;
     }
 
@@ -183,10 +191,19 @@ export const getCertificateData = async (certificateNumber: string): Promise<Cer
       .from('certificates')
       .select('*')
       .eq('certificatenumber', certificateNumber)
-      .single();
+      .maybeSingle();
 
     if (error) {
-      console.error('Sertifika bulunamadı:', error);
+      console.error('Sertifika sorgu hatası:', error);
+      // Birden fazla satır varsa logla ama null döndür
+      if (error.code === 'PGRST116' || error.message?.includes('multiple')) {
+        console.error('Bu sertifika numarası için birden fazla kayıt bulundu:', certificateNumber);
+      }
+      return null;
+    }
+
+    if (!data) {
+      console.error('Sertifika bulunamadı:', certificateNumber);
       return null;
     }
 
