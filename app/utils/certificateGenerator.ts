@@ -11,6 +11,10 @@ interface TemplateDesignSettings {
     body: string;
     name: string;
     title: string;
+    duration?: string;
+    signature?: string;
+    description?: string;
+    course_name?: string;
   };
   colors: {
     name: string;
@@ -19,6 +23,11 @@ interface TemplateDesignSettings {
     secondary: string;
     institution: string;
     certificate_no: string;
+    date?: string;
+    duration?: string;
+    signature?: string;
+    description?: string;
+    course_name?: string;
   };
   layout: {
     date_position: PositionConfig;
@@ -29,6 +38,7 @@ interface TemplateDesignSettings {
     institution_position: PositionConfig;
     certificate_no_position: PositionConfig;
     course_name_position: PositionConfig;
+    duration_position?: PositionConfig;
   };
   font_sizes: {
     date: number;
@@ -39,16 +49,17 @@ interface TemplateDesignSettings {
     certificate_no: number;
     description: number;
     course_name: number;
+    duration?: number;
   };
 }
 
 interface PositionConfig {
   x: number;
   y: number;
-  align: 'left' | 'center' | 'right';
-  enabled: boolean;
-  x_manual: number;
-  y_manual: number;
+  align?: 'left' | 'center' | 'right';
+  enabled?: boolean;
+  x_manual?: number;
+  y_manual?: number;
 }
 
 interface CertificateTemplate {
@@ -272,26 +283,111 @@ const getFontFamily = (fontType: string): string => {
   return fontMap[fontType] || fontMap['sans_serif'];
 };
 
-// Pozisyon hesaplama (yüzde bazlı koordinatları piksel'e çevir)
-const calculatePosition = (config: PositionConfig, canvasWidth: number, canvasHeight: number) => {
-  if (config.enabled) {
-    const x = Math.round((config.x / 100) * canvasWidth);
-    const y = Math.round((config.y / 100) * canvasHeight);
-    
-    console.log('Pozisyon hesaplandı:', { 
-      original: { x: config.x, y: config.y }, 
-      calculated: { x, y }, 
-      canvas: { width: canvasWidth, height: canvasHeight },
-      align: config.align 
-    });
-    
-    return {
-      x,
-      y,
-      align: config.align
-    };
+const DEFAULT_DURATION_POSITION: PositionConfig = {
+  x: 38,
+  y: 83.5,
+  align: 'left',
+  enabled: true,
+  x_manual: 38,
+  y_manual: 83.5,
+};
+
+const DEFAULT_DESCRIPTION_POSITION: PositionConfig = {
+  x: 10,
+  y: 50,
+  align: 'left',
+  enabled: true,
+  x_manual: 10,
+  y_manual: 50,
+};
+
+const asFiniteNumber = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+/** Süre: duration alanı, totalHours veya açıklamadaki "10 saatlik" */
+const resolveDurationValue = (data: Certificate): string => {
+  for (const candidate of [data.duration, data.totalHours]) {
+    const value = String(candidate || '').trim();
+    if (value) return value;
   }
-  return null;
+  const desc = String(data.description || data.completion_text || '');
+  const trMatch = desc.match(/(\d+(?:[.,]\d+)?)\s*saat(?:lik)?/i);
+  if (trMatch) return `${trMatch[1].replace(',', '.')} saat`;
+  const enMatch = desc.match(/(\d+(?:[.,]\d+)?)\s*-?\s*hours?\b/i);
+  if (enMatch) return `${enMatch[1]} hours`;
+  return '';
+};
+
+const resolveInstructorName = (data: Certificate): string =>
+  String(data.instructor || data.signature || '').trim();
+
+// Pozisyon hesaplama (x_manual/y_manual tercih; yüzde → piksel)
+const calculatePosition = (
+  config: PositionConfig | null | undefined,
+  canvasWidth: number,
+  canvasHeight: number,
+  forceEnabled = false
+) => {
+  if (!config) return null;
+  if (!forceEnabled && config.enabled === false) return null;
+
+  const xPct = asFiniteNumber(config.x_manual ?? config.x, 50);
+  const yPct = asFiniteNumber(config.y_manual ?? config.y, 50);
+  const x = Math.round((xPct / 100) * canvasWidth);
+  const y = Math.round((yPct / 100) * canvasHeight);
+
+  return {
+    x,
+    y,
+    align: config.align || 'center',
+  };
+};
+
+const normalizeLayoutForRender = (settings: TemplateDesignSettings): TemplateDesignSettings => {
+  const layout = settings.layout || ({} as TemplateDesignSettings['layout']);
+  const desc = layout.description_position;
+  const duration = layout.duration_position;
+
+  const descIsNarrowCenter =
+    !desc ||
+    desc.align === 'center' ||
+    desc.align == null ||
+    Math.abs(asFiniteNumber(desc.x_manual ?? desc.x, 50) - 50) <= 8;
+
+  return {
+    ...settings,
+    colors: {
+      ...settings.colors,
+      duration: settings.colors.duration || settings.colors.secondary || settings.colors.text,
+      date: settings.colors.date || settings.colors.text,
+      signature: settings.colors.signature || settings.colors.secondary || settings.colors.text,
+      description: settings.colors.description || settings.colors.text,
+    },
+    font_sizes: {
+      ...settings.font_sizes,
+      duration: settings.font_sizes.duration || settings.font_sizes.date || 20,
+    },
+    fonts: {
+      ...settings.fonts,
+      duration: settings.fonts.duration || settings.fonts.body,
+    },
+    layout: {
+      ...layout,
+      description_position: descIsNarrowCenter
+        ? { ...DEFAULT_DESCRIPTION_POSITION, enabled: desc?.enabled !== false }
+        : {
+            ...desc,
+            align: 'left',
+            x: Math.min(asFiniteNumber(desc.x, 12), 14),
+            x_manual: Math.min(asFiniteNumber(desc.x_manual ?? desc.x, 12), 14),
+            enabled: desc.enabled !== false,
+          },
+      duration_position:
+        !duration || duration.enabled === false
+          ? { ...DEFAULT_DURATION_POSITION }
+          : { ...duration, enabled: true },
+    },
+  };
 };
 
 // Dinamik sertifika oluşturma
@@ -333,6 +429,8 @@ export const generateDynamicCertificateCanvas = async (
     } else {
       throw new Error('Template design settings bulunamadı veya geçersiz format');
     }
+
+    designSettings = normalizeLayoutForRender(designSettings);
     
     // Arka plan resmini yükle
     console.log('Arka plan resmi yükleniyor:', template.background_image);
@@ -359,33 +457,31 @@ export const generateDynamicCertificateCanvas = async (
     const nameFont = getFontFamily(designSettings.fonts.name);
     const titleFont = getFontFamily(designSettings.fonts.title);
     const bodyFont = getFontFamily(designSettings.fonts.body);
+    const durationFont = getFontFamily(designSettings.fonts.duration || designSettings.fonts.body);
     
     // Renkleri ayarla
     const colors = designSettings.colors;
     const fontSizes = designSettings.font_sizes;
+    const layout = designSettings.layout;
     
     // İsim pozisyonu
-    const namePos = calculatePosition(designSettings.layout.name_position, canvas.width, canvas.height);
-    if (namePos && designSettings.layout.name_position.enabled) {
+    const namePos = calculatePosition(layout.name_position, canvas.width, canvas.height);
+    if (namePos) {
       ctx.fillStyle = colors.name;
       ctx.font = `600 ${fontSizes.name}px ${nameFont}`;
       ctx.textAlign = namePos.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      
-      // İsmi çiz - pozisyon zaten piksel cinsinden hesaplandı
       ctx.fillText(data.fullname, namePos.x, namePos.y);
-      console.log('İsim çizildi:', { text: data.fullname, x: namePos.x, y: namePos.y, align: namePos.align });
     }
     
     // Tarih pozisyonu
-    const datePos = calculatePosition(designSettings.layout.date_position, canvas.width, canvas.height);
-    if (datePos && designSettings.layout.date_position.enabled) {
-      ctx.fillStyle = colors.text;
+    const datePos = calculatePosition(layout.date_position, canvas.width, canvas.height);
+    if (datePos) {
+      ctx.fillStyle = colors.date || colors.text;
       ctx.font = `500 ${fontSizes.date}px ${bodyFont}`;
       ctx.textAlign = datePos.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
       
-      // Tarihi formatla
       let formattedDate;
       const dateObj = new Date(data.issuedate);
       if (data.language === 'en' || data.language === 'global') {
@@ -402,114 +498,128 @@ export const generateDynamicCertificateCanvas = async (
         });
       }
       
-      // Tarihi çiz - pozisyon zaten piksel cinsinden hesaplandı
       ctx.fillText(formattedDate, datePos.x, datePos.y);
-      console.log('Tarih çizildi:', { text: formattedDate, x: datePos.x, y: datePos.y, align: datePos.align });
+    }
+
+    // Süre (Program Süresi) — etiket şablon görselinde; sadece değeri çiz
+    const durationValue = resolveDurationValue(data);
+    let durationPos = calculatePosition(layout.duration_position, canvas.width, canvas.height);
+    if (!durationPos && durationValue) {
+      durationPos = calculatePosition(DEFAULT_DURATION_POSITION, canvas.width, canvas.height, true);
+    }
+    if (durationPos && durationValue) {
+      ctx.fillStyle = colors.duration || colors.secondary || colors.text;
+      ctx.font = `500 ${fontSizes.duration || fontSizes.date}px ${durationFont}`;
+      ctx.textAlign = (durationPos.align || 'left') as CanvasTextAlign;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(durationValue, durationPos.x, durationPos.y);
+      console.log('Süre çizildi:', { text: durationValue, x: durationPos.x, y: durationPos.y });
     }
     
     // Başlık pozisyonu
-    const titlePos = calculatePosition(designSettings.layout.title_position, canvas.width, canvas.height);
-    if (titlePos && designSettings.layout.title_position.enabled) {
+    const titlePos = calculatePosition(layout.title_position, canvas.width, canvas.height);
+    if (titlePos) {
       ctx.fillStyle = colors.primary;
       ctx.font = `600 ${fontSizes.title}px ${titleFont}`;
       ctx.textAlign = titlePos.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      
       ctx.fillText(data.certificate_title || '', titlePos.x, titlePos.y);
-      console.log('Başlık çizildi:', { text: data.certificate_title, x: titlePos.x, y: titlePos.y, align: titlePos.align });
     }
     
     // Kurum pozisyonu
-    const institutionPos = calculatePosition(designSettings.layout.institution_position, canvas.width, canvas.height);
-    if (institutionPos && designSettings.layout.institution_position.enabled) {
+    const institutionPos = calculatePosition(layout.institution_position, canvas.width, canvas.height);
+    if (institutionPos && (data.organization || '')) {
       ctx.fillStyle = colors.institution;
       ctx.font = `500 ${fontSizes.institution}px ${bodyFont}`;
       ctx.textAlign = institutionPos.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      
       ctx.fillText(data.organization || '', institutionPos.x, institutionPos.y);
-      console.log('Kurum çizildi:', { text: data.organization, x: institutionPos.x, y: institutionPos.y, align: institutionPos.align });
     }
     
     // Sertifika numarası pozisyonu
-    const certNoPos = calculatePosition(designSettings.layout.certificate_no_position, canvas.width, canvas.height);
-    if (certNoPos && designSettings.layout.certificate_no_position.enabled) {
+    const certNoPos = calculatePosition(layout.certificate_no_position, canvas.width, canvas.height);
+    if (certNoPos && data.certificatenumber) {
       ctx.fillStyle = colors.certificate_no;
       ctx.font = `500 ${fontSizes.certificate_no}px ${bodyFont}`;
       ctx.textAlign = certNoPos.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      
       ctx.fillText(data.certificatenumber, certNoPos.x, certNoPos.y);
-      console.log('Sertifika numarası çizildi:', { text: data.certificatenumber, x: certNoPos.x, y: certNoPos.y, align: certNoPos.align });
     }
-    
 
-    
-    // Açıklama pozisyonu (opsiyonel) - description sütunu kullan
-    const descriptionPos = calculatePosition(designSettings.layout.description_position, canvas.width, canvas.height);
-    if (descriptionPos && designSettings.layout.description_position.enabled) {
-      ctx.fillStyle = colors.text;
-      ctx.font = `400 ${fontSizes.description || fontSizes.institution}px ${bodyFont}`;
-      ctx.textAlign = descriptionPos.align as CanvasTextAlign;
-      ctx.textBaseline = 'middle';
-      
-      // Description alanından metni al, yoksa completion_text'i kullan
-      const descriptionText = data.description || data.completion_text || 'Bu sertifika, belirtilen kursun başarıyla tamamlandığını belirtir.';
-      
-      // Açıklama metnini çok satırlı olarak çiz
-      const maxWidth = canvas.width * 0.6; // Maksimum genişlik
-      const words = descriptionText.split(' ');
+    // Açıklama — sola hizalı, geniş; alt meta ile çakışmasın
+    const descriptionPos = calculatePosition(layout.description_position, canvas.width, canvas.height);
+    if (descriptionPos) {
+      const descriptionText =
+        data.description ||
+        data.completion_text ||
+        'Bu sertifika, belirtilen kursun başarıyla tamamlandığını belirtir.';
+      const descriptionFontSize = fontSizes.description || fontSizes.institution;
+      const descX = Math.min(descriptionPos.x, canvas.width * 0.12);
+      const descY = Math.min(descriptionPos.y, canvas.height * 0.56);
+      const maxWidth = Math.max(canvas.width * 0.72, canvas.width - descX - canvas.width * 0.08);
+      const maxBottom = canvas.height * 0.68;
+
+      ctx.fillStyle = colors.description || colors.text;
+      ctx.font = `400 ${descriptionFontSize}px ${bodyFont}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+
+      const words = descriptionText.split(/\s+/).filter(Boolean);
       const lines: string[] = [];
       let currentLine = words[0] || '';
-      
       for (let i = 1; i < words.length; i++) {
-        const testLine = currentLine + ' ' + words[i];
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth) {
+        const testLine = `${currentLine} ${words[i]}`;
+        if (ctx.measureText(testLine).width > maxWidth) {
           lines.push(currentLine);
           currentLine = words[i];
         } else {
           currentLine = testLine;
         }
       }
-      lines.push(currentLine);
-      
-      // Satırları çiz
-      const lineHeight = (fontSizes.description || fontSizes.institution) * 1.2;
-      lines.forEach((line, index) => {
-        const y = descriptionPos.y + (index * lineHeight);
-        ctx.fillText(line, descriptionPos.x, y);
+      if (currentLine) lines.push(currentLine);
+
+      const lineHeight = descriptionFontSize * 1.38;
+      const maxLines = Math.max(1, Math.floor((maxBottom - descY) / lineHeight) + 1);
+      let visibleLines = lines;
+      if (lines.length > maxLines) {
+        visibleLines = lines.slice(0, maxLines);
+        const last = visibleLines[visibleLines.length - 1] || '';
+        visibleLines[visibleLines.length - 1] =
+          last.length > 3 ? `${last.replace(/\s+\S*$/, '')}…` : `${last}…`;
+      }
+
+      visibleLines.forEach((line, index) => {
+        ctx.fillText(line, descX, descY + index * lineHeight);
       });
-      
-      console.log('Açıklama çizildi:', { text: descriptionText, x: descriptionPos.x, y: descriptionPos.y, align: descriptionPos.align, lines: lines.length });
     }
     
-    // Kurs adı pozisyonu (opsiyonel) - coursename kullan
-    const courseNamePos = calculatePosition(designSettings.layout.course_name_position, canvas.width, canvas.height);
-    if (courseNamePos && designSettings.layout.course_name_position.enabled && data.coursename) {
-      ctx.fillStyle = colors.text;
+    // Kurs adı pozisyonu
+    const courseNamePos = calculatePosition(layout.course_name_position, canvas.width, canvas.height);
+    if (courseNamePos && data.coursename) {
+      ctx.fillStyle = colors.course_name || colors.text;
       ctx.font = `600 ${fontSizes.course_name || fontSizes.title}px ${titleFont}`;
       ctx.textAlign = courseNamePos.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      
       ctx.fillText(data.coursename, courseNamePos.x, courseNamePos.y);
-      console.log('Kurs adı çizildi:', { text: data.coursename, x: courseNamePos.x, y: courseNamePos.y, align: courseNamePos.align });
     }
     
-    // İmza pozisyonu (opsiyonel) - instructor kullan
-    const signaturePos = calculatePosition(designSettings.layout.signature_position, canvas.width, canvas.height);
-    if (signaturePos && designSettings.layout.signature_position.enabled) {
-      ctx.fillStyle = colors.secondary;
+    // İmza / eğitmen
+    const instructorName = resolveInstructorName(data);
+    let signaturePos = calculatePosition(layout.signature_position, canvas.width, canvas.height);
+    if (!signaturePos && instructorName) {
+      signaturePos = calculatePosition(
+        { x: 76, y: 79, align: 'center', enabled: true, x_manual: 76, y_manual: 79 },
+        canvas.width,
+        canvas.height,
+        true
+      );
+    }
+    if (signaturePos && instructorName) {
+      ctx.fillStyle = colors.signature || colors.secondary || colors.text;
       ctx.font = `500 ${fontSizes.signature}px ${bodyFont}`;
       ctx.textAlign = signaturePos.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      
-      // Instructor alanını kullan
-      const signatureText = data.instructor || '';
-      if (signatureText) {
-        ctx.fillText(signatureText, signaturePos.x, signaturePos.y);
-        console.log('İmza çizildi:', { text: signatureText, x: signaturePos.x, y: signaturePos.y, align: signaturePos.align });
-      }
+      ctx.fillText(instructorName, signaturePos.x, signaturePos.y);
     }
     
   } catch (error) {
