@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Phone, Mail } from 'lucide-react';
+import { ArrowRight, Mail } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CTASection() {
@@ -30,20 +30,7 @@ export default function CTASection() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-            <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 p-6 rounded-lg shadow-sm">
-              <div className="flex items-center space-x-3 mb-3">
-                <Phone className="w-5 h-5 text-gray-500 dark:text-neutral-400" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Telefon ile İletişim</h3>
-              </div>
-              <p className="text-gray-600 dark:text-neutral-300 text-sm mb-2">
-                Hızlı destek için bizi arayın
-              </p>
-              <a href="tel:+905419444634" className="text-gray-900 dark:text-white font-medium hover:text-red-600 dark:hover:text-red-400 transition-colors">
-                +90 541 944 46 34
-              </a>
-            </div>
-
+          <div className="max-w-md text-left">
             <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 p-6 rounded-lg shadow-sm">
               <div className="flex items-center space-x-3 mb-3">
                 <Mail className="w-5 h-5 text-gray-500 dark:text-neutral-400" />
